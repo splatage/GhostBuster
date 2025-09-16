@@ -19,6 +19,8 @@ public final class GhostBusterPlugin extends JavaPlugin {
 
   @Override public void onEnable() {
     saveDefaultConfig();
+    getCommand("ghostbuster").setExecutor(this);
+    
     this.cfg = PluginConfig.from(getConfig());
     this.platform = PlatformInfo.detect(Bukkit.getServer());
     this.scheduler = new SchedulerFacadeImpl(this, platform);
