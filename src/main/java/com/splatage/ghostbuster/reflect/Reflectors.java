@@ -67,4 +67,12 @@ public static int retainedCount() {
   return n;
 }
 
+public static void track(UUID id, Object obj) {
+  if (id == null || obj == null) return;
+  references.put(id, new WeakReference<>(obj, queue));
+}
+
+}
+
+
 }
