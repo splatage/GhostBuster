@@ -5,6 +5,7 @@ import com.splatage.ghostbuster.core.GhostBusterService;
 import com.splatage.ghostbuster.platform.PlatformInfo;
 import com.splatage.ghostbuster.platform.SchedulerFacade;
 import com.splatage.ghostbuster.platform.SchedulerFacadeImpl;
+import com.splatage.ghostbuster.reflect.Reflectors;
 import com.splatage.ghostbuster.util.LogFmt;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
@@ -74,6 +75,15 @@ public final class GhostBusterPlugin extends JavaPlugin {
       return true;
     }
 
+    if (args[0].equalsIgnoreCase("dump")) {
+      if (!cfg.logReflectorDebug()) {
+        sender.sendMessage("reflector-debug is off. Use /ghostbuster debug to enable.");
+      } else {
+        Reflectors.dumpTracked(sender);
+      }
+      return true;
+    }
+
     if (args[0].equalsIgnoreCase("scan")) {
       service.requestImmediateScan(sender::sendMessage);
       return true;
@@ -84,7 +94,7 @@ public final class GhostBusterPlugin extends JavaPlugin {
       return true;
     }
 
-    sender.sendMessage("Usage: /ghostbuster <status|dryrun|debug|scan|prune <uuid>>");
+    sender.sendMessage("Usage: /ghostbuster <status|dryrun|debug|dump|scan|prune <uuid>>");
     return true;
   }
 }
