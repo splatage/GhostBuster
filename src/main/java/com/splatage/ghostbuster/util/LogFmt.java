@@ -5,7 +5,7 @@ import java.util.Map;
 
 public final class LogFmt {
   private final Map<String,Object> kv = new LinkedHashMap<>();
-  public static LogFmt kv(String k, Object v) { return new LogFmt().kv(k, v); }
+  public static LogFmt of(String k, Object v) { return new LogFmt().kv(k, v); }
   public LogFmt kv(String k, Object v) { kv.put(k, v); return this; }
   @Override public String toString() {
     StringBuilder sb = new StringBuilder();
