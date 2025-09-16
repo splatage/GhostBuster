@@ -85,9 +85,20 @@ public final class GhostBusterService implements Listener {
       .toString();
   }
 
-  public void requestImmediateScan(Consumer<String> reply) {
-    analyzePool.execute(() -> { snapshotThenAnalyze(); reply.accept("Scan triggered."); });
-  }
+public void requestImmediateScan(Consumer<String> reply) {
+  analyzePool.execute(() -> {
+    Map<String, Integer> result = snapshotThenAnalyze();
+    if (result.isEmpty()) {
+      reply.accept("Scan complete: no ghost candidates found.");
+    } else {
+      String summary = result.entrySet().stream()
+          .map(e -> e.getKey() + "=" + e.getValue())
+          .collect(Collectors.joining(" "));
+      reply.accept("Scan complete: " + summary);
+    }
+  });
+}
+
   public void requestPrune(String uuidStr, Consumer<String> reply) {
     try {
       UUID id = UUID.fromString(uuidStr);
