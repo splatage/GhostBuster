@@ -26,7 +26,7 @@ dependencies {
 }
 
 tasks.processResources {
-    filesMatching("paper-plugin.yml") {
+    filesMatching("plugin.yml") {
         expand("version" to (project.version as String))
     }
 }
