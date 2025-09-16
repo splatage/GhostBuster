@@ -33,6 +33,8 @@ public final class GhostBusterService implements Listener {
   private final SnapshotDiff history = new SnapshotDiff();
   private final RateLimiter unlinkRate;
 
+  private long lastGcTimestamp = 0;
+
   public GhostBusterService(Plugin plugin, PluginConfig cfg, SchedulerFacade sched, PlatformInfo platform) {
     this.plugin = plugin; this.cfg = cfg; this.sched = sched; this.platform = platform;
     this.nms = new NmsIntrospector(plugin.getLogger(), cfg);
@@ -43,7 +45,8 @@ public final class GhostBusterService implements Listener {
     plugin.getServer().getPluginManager().registerEvents(this, plugin);
     // Seed live set initially (sync)
     sched.runGlobalSync(() -> {
-      // live snapshot from cache (cheap) + sanity add of currently present
+      Set<UUID> liveSnap = new HashSet<>();
+      Map<String, Set<UUID>> perWorldTracked = new HashMap<>();
       liveSnap.addAll(live.keySet());
       for (World w: Bukkit.getWorlds()) {
         for (Entity e : w.getEntities()) {
@@ -52,6 +55,7 @@ public final class GhostBusterService implements Listener {
         perWorldTracked.put(w.getName(), nms.snapshotTrackedUUIDs(w, cfg.maxMapScanEntries()));
       }
     });
+
     // periodic snapshot
     long period = Math.max(1, cfg.scanIntervalSeconds());
     analyzePool.scheduleAtFixedRate(this::snapshotThenAnalyze, period, period, TimeUnit.SECONDS);
