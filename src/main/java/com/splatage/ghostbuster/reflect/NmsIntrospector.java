@@ -20,7 +20,7 @@ public final class NmsIntrospector {
 
   public Set<UUID> snapshotTrackedUUIDs(World world, int maxEntries) {
     Set<UUID> out = new HashSet<>();
-    Object sl = ((CraftWorld) world).getHandle(); // ServerLevel (versioned type)
+    Object sl = Reflectors.call(world, "getHandle", new Class<?>[0]); // ServerLevel (versioned type)
     if (sl == null) return out;
 
     // Candidate roots to scan for maps/sets that reference entities/UUIDs
