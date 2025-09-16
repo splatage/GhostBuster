@@ -71,8 +71,8 @@ public final class GhostBusterService implements Listener {
 
   public String statusLine() {
     return LogFmt.of("live", live.size())
-        .kv("ghosts", history.candidateSize())
-        .kv("retained", Reflectors.trackedCount())
+        .kv("Size", history.candidateSize())
+        .kv("Ghosts", Reflectors.trackedCount())
         .kv("lastGC", (System.currentTimeMillis() - lastGcTimestamp) / 1000 + "s")
         .kv("dryRun", cfg.dryRun())
         .kv("pwt", platform.parallelTickingDetected())
