@@ -113,17 +113,19 @@ public final class Reflectors {
         (obj instanceof org.bukkit.entity.Entity e ? e.getWorld().getName() : "n/a"));
     }
   }
-  public static void dumpTracked(CommandSender sender) {
+public static List<String> dumpTrackedLines() {
+  List<String> out = new ArrayList<>();
   if (references.isEmpty()) {
-    sender.sendMessage("No tracked entities.");
-    return;
+    out.add("No tracked entities.");
+    return out;
   }
-  sender.sendMessage("Tracked UUIDs:");
+  out.add("Tracked UUIDs:");
   for (Map.Entry<UUID, WeakReference<Object>> entry : references.entrySet()) {
     Object obj = entry.getValue().get();
     String state = (obj == null) ? "cleared" : obj.getClass().getSimpleName();
-    sender.sendMessage(" - " + entry.getKey() + " => " + state);
+    out.add(" - " + entry.getKey() + " => " + state);
   }
+  return out;
 }
 
 }
