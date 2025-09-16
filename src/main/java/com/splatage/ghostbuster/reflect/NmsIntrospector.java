@@ -79,7 +79,7 @@ public final class NmsIntrospector {
 
   public List<String> findOwners(World world, UUID uuid, int limit) {
     List<String> owners = new ArrayList<>();
-    Object sl = ((CraftWorld) world).getHandle();
+    Object sl = Reflectors.call(world, "getHandle", new Class<?>[0]);
     if (sl == null) return owners;
 
     List<Object> roots = new ArrayList<>();
@@ -126,7 +126,7 @@ public final class NmsIntrospector {
   // -------- unlink (best-effort, version-agnostic) --------
 
   public boolean unlinkFromOwners(World world, UUID uuid) {
-    Object sl = ((CraftWorld) world).getHandle();
+    Object sl = Reflectors.call(world, "getHandle", new Class<?>[0]);
     if (sl == null) return false;
     boolean changed = false;
 
