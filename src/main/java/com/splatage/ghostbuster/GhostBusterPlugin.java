@@ -79,7 +79,9 @@ public final class GhostBusterPlugin extends JavaPlugin {
       if (!cfg.logReflectorDebug()) {
         sender.sendMessage("reflector-debug is off. Use /ghostbuster debug to enable.");
       } else {
-        Reflectors.dumpTracked(sender);
+        for (String line : Reflectors.dumpTrackedLines()) {
+          sender.sendMessage(line);
+        }
       }
       return true;
     }
