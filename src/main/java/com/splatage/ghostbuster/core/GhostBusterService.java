@@ -117,12 +117,15 @@ public final class GhostBusterService implements Listener {
           .filter(u -> !liveSnap.contains(u))
           .collect(Collectors.toList());
 
-      if (!ghosts.isEmpty()) {
+    if (!ghosts.isEmpty()) {
+      plugin.getLogger().info(
         LogFmt.of("event", "ghosts.detected")
-          .kv("world", e.getKey())
-          .kv("count", ghosts.size())
-          .info();
-      }
+              .kv("world", e.getKey())
+              .kv("count", ghosts.size())
+              .toString()
+      );
+    }
+
       
       ghostsByWorld.put(e.getKey(), history.filterStable(ghosts, cfg.hysteresisCycles()));
     }
