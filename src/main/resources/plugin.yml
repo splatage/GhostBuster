@@ -1,6 +1,6 @@
 name: GhostBuster
 main: com.splatage.ghostbuster.GhostBusterPlugin
-version: 0.1.0
+version: "${version}"
 api-version: '1.20'   # good for 1.20+; Paper tolerates forward on 1.21
 folia-supported: true
 description: Prunes ghost entity links to allow GC to reclaim retained objects.
