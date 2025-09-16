@@ -45,14 +45,11 @@ public final class GhostBusterService implements Listener {
   public void start() {
     plugin.getServer().getPluginManager().registerEvents(this, plugin);
     sched.runGlobalSync(() -> {
-      Set<UUID> liveSnap = new HashSet<>();
-      Map<String, Set<UUID>> perWorldTracked = new HashMap<>();
-      liveSnap.addAll(live.keySet());
+      // Initial sync to populate live entity snapshot
       for (World w : Bukkit.getWorlds()) {
         for (Entity e : w.getEntities()) {
-          Reflectors.track(e.getUniqueId(), e);
+          live.put(e.getUniqueId(), w.getName());
         }
-        perWorldTracked.put(w.getName(), nms.snapshotTrackedUUIDs(w, cfg.maxMapScanEntries()));
       }
     });
 
@@ -152,6 +149,7 @@ public final class GhostBusterService implements Listener {
           int pruned = 0;
           for (UUID id : candidates) {
             if (pruned >= allowed) break;
+            Reflectors.track(id, null); // Track ghost candidates only
             pruneOne(w, id, msg -> plugin.getLogger().warning(msg));
             pruned++;
           }
