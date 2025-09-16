@@ -1,0 +1,22 @@
+# GhostBuster Configuration
+
+# Run-time safety switches
+dry-run: true                    # true = log only, no pruning
+allow-under-parallel-ticking: false  # refuse to mutate state if parallel world ticking detected
+
+# Scanning cadence (sync snapshots on the correct thread)
+scan:
+  interval-seconds: 60           # how often to snapshot and diff
+  verify-delay-ticks: 5          # re-check after N ticks before pruning
+  hysteresis-cycles: 3           # candidate must appear in N consecutive scans
+
+# Limits (prevent heavy scans / mass unlinks)
+limits:
+  max-unlinks-per-tick: 10
+  max-unlinks-per-minute: 200
+  max-map-scan-entries: 10000    # per container; to cap reflection scans
+  log-owner-sample: 5            # how many owners to print per ghost
+
+# Logging
+logging:
+  verbose: false
