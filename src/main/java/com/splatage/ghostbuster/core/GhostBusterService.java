@@ -4,6 +4,7 @@ import com.splatage.ghostbuster.config.PluginConfig;
 import com.splatage.ghostbuster.platform.PlatformInfo;
 import com.splatage.ghostbuster.platform.SchedulerFacade;
 import com.splatage.ghostbuster.reflect.NmsIntrospector;
+import com.splatage.ghostbuster.reflect.Reflectors;
 import com.splatage.ghostbuster.util.LogFmt;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
@@ -18,6 +19,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+
 
 public final class GhostBusterService implements Listener {
   private final Plugin plugin;
@@ -116,7 +118,10 @@ public final class GhostBusterService implements Listener {
           .collect(Collectors.toList());
 
       if (!ghosts.isEmpty()) {
-        LogFmt.info("GhostBuster: world=%s, detected=%d ghost(s)", e.getKey(), ghosts.size());
+        LogFmt.of("event", "ghosts.detected")
+          .kv("world", e.getKey())
+          .kv("count", ghosts.size())
+          .info();
       }
       
       ghostsByWorld.put(e.getKey(), history.filterStable(ghosts, cfg.hysteresisCycles()));
