@@ -43,8 +43,13 @@ public final class GhostBusterService implements Listener {
     plugin.getServer().getPluginManager().registerEvents(this, plugin);
     // Seed live set initially (sync)
     sched.runGlobalSync(() -> {
+      // live snapshot from cache (cheap) + sanity add of currently present
+      liveSnap.addAll(live.keySet());
       for (World w: Bukkit.getWorlds()) {
-        for (Entity e: w.getEntities()) live.put(e.getUniqueId(), w.getName());
+        for (Entity e : w.getEntities()) {
+          Reflectors.track(e.getUniqueId(), e);
+        }
+        perWorldTracked.put(w.getName(), nms.snapshotTrackedUUIDs(w, cfg.maxMapScanEntries()));
       }
     });
     // periodic snapshot
