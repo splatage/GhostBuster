@@ -12,7 +12,8 @@ public record PluginConfig(
     int maxUnlinksPerMinute,
     int maxMapScanEntries,
     int logOwnerSample,
-    boolean verbose
+    boolean verbose,
+    boolean logReflectorDebug
 ) {
   public static PluginConfig from(FileConfiguration c) {
     return new PluginConfig(
@@ -25,7 +26,12 @@ public record PluginConfig(
         c.getInt("limits.max-unlinks-per-minute", 200),
         c.getInt("limits.max-map-scan-entries", 10000),
         c.getInt("limits.log-owner-sample", 5),
-        c.getBoolean("logging.verbose", false)
+        c.getBoolean("logging.verbose", false),
+        c.getBoolean("logging.reflector-debug", false)
     );
+  }
+
+  public boolean logReflectorDebug() {
+    return logReflectorDebug;
   }
 }
