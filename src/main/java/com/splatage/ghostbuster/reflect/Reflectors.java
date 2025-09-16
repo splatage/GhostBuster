@@ -42,10 +42,20 @@ private static boolean isJdkClass(Class<?> c) {
   String n = c.getName();
   return n.startsWith("java.") || n.startsWith("jdk.") || n.startsWith("sun.");
 }
+  
 public static Object getFieldValue(Object target, Field f) {
   try { f.setAccessible(true); return f.get(target); } catch (Throwable t) { return null; }
 }
 public static int trackedCount() {
   return references.size();
 }
+  
+public static int retainedCount() {
+  int n = 0;
+  for (WeakReference<Object> ref : references.values()) {
+    if (ref.get() != null) n++;
+  }
+  return n;
+}
+
 }
