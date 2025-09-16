@@ -74,13 +74,13 @@ public final class GhostBusterService implements Listener {
   }
 
   public String statusLine() {
-    return LogFmt.of("live", live.size())
-        .kv("Size", history.candidateSize())
-        .kv("Ghosts", Reflectors.trackedCount())
-        .kv("lastGC", (System.currentTimeMillis() - lastGcTimestamp) / 1000 + "s")
-        .kv("dryRun", cfg.dryRun())
-        .kv("pwt", platform.parallelTickingDetected())
-        .toString();
+  return LogFmt.of("live", live.size())
+      .kv("ghosts", history.candidateSize())
+      .kv("retained", Reflectors.retainedCount())
+      .kv("lastGC", (System.currentTimeMillis() - lastGcTimestamp) / 1000 + "s")
+      .kv("dryRun", cfg.dryRun())
+      .kv("pwt", platform.parallelTickingDetected())
+      .toString();
   }
 
   public void requestImmediateScan(Consumer<String> reply) {
@@ -105,6 +105,7 @@ public final class GhostBusterService implements Listener {
       for (World w: Bukkit.getWorlds()) {
         perWorldTracked.put(w.getName(), nms.snapshotTrackedUUIDs(w, cfg.maxMapScanEntries()));
       }
+      lastGcTimestamp = System.currentTimeMillis();
     });
 
     // Step 2 (ASYNC): diff
