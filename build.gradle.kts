@@ -3,6 +3,10 @@ plugins {
     `java-library`
 }
 
+val major = "0.1"
+val build = System.getenv("BUILD_NUMBER") ?: "dev"
+version = "$major.$build"
+
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(21))
