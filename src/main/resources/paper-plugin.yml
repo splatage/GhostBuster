@@ -1,0 +1,14 @@
+name: GhostBuster
+main: com.example.ghostbuster.GhostBusterPlugin
+version: 0.1.0
+api-version: '1.20'   # good for 1.20+; Paper tolerates forward on 1.21
+folia-supported: true
+description: Prunes ghost entity links to allow GC to reclaim retained objects.
+author: splatage
+commands:
+  ghostbuster:
+    description: GhostBuster admin commands
+    usage: /ghostbuster <status|dryrun|prune <uuid>|scan>
+permissions:
+  ghostbuster.admin:
+    default: op
