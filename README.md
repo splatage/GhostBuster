@@ -1,6 +1,6 @@
 # GhostBuster
 MC plugin to search and prune orphan entities that the GC misses
-
+```
 ghostbuster/
 ├─ README.md
 ├─ build.gradle.kts
@@ -22,4 +22,4 @@ ghostbuster/
    ├─ reflect/NmsIntrospector.java
    ├─ reflect/Reflectors.java
    └─ util/LogFmt.java
-
+```
