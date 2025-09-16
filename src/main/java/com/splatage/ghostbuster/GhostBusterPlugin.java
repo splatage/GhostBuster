@@ -1,11 +1,11 @@
-package com.example.ghostbuster;
+package com.splatage.ghostbuster;
 
-import com.example.ghostbuster.config.PluginConfig;
-import com.example.ghostbuster.core.GhostBusterService;
-import com.example.ghostbuster.platform.PlatformInfo;
-import com.example.ghostbuster.platform.SchedulerFacade;
-import com.example.ghostbuster.platform.SchedulerFacadeImpl;
-import com.example.ghostbuster.util.LogFmt;
+import com.splatage.ghostbuster.config.PluginConfig;
+import com.splatage.ghostbuster.core.GhostBusterService;
+import com.splatage.ghostbuster.platform.PlatformInfo;
+import com.splatage.ghostbuster.platform.SchedulerFacade;
+import com.splatage.ghostbuster.platform.SchedulerFacadeImpl;
+import com.splatage.ghostbuster.util.LogFmt;
 import org.bukkit.Bukkit;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
