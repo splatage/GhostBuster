@@ -70,10 +70,13 @@ public final class GhostBusterService implements Listener {
   }
 
   public String statusLine() {
-    return LogFmt.of("liveKnown", live.size())
+    return LogFmt.of("live", live.size())
+        .kv("ghosts", history.candidateSize())
+        .kv("retained", Reflectors.trackedCount())
+        .kv("lastGC", (System.currentTimeMillis() - lastGcTimestamp) / 1000 + "s")
         .kv("dryRun", cfg.dryRun())
-        .kv("histLen", history.candidateSize())
-        .kv("pwt", platform.parallelTickingDetected()).toString();
+        .kv("pwt", platform.parallelTickingDetected())
+        .toString();
   }
 
   public void requestImmediateScan(Consumer<String> reply) {
@@ -106,8 +109,14 @@ public final class GhostBusterService implements Listener {
       List<UUID> ghosts = e.getValue().stream()
           .filter(u -> !liveSnap.contains(u))
           .collect(Collectors.toList());
+
+      if (!ghosts.isEmpty()) {
+        LogFmt.info("GhostBuster: world=%s, detected=%d ghost(s)", e.getKey(), ghosts.size());
+      }
+      
       ghostsByWorld.put(e.getKey(), history.filterStable(ghosts, cfg.hysteresisCycles()));
     }
+
 
     // Step 3 (SYNC): verify & prune
     if (!ghostsByWorld.isEmpty()) {
