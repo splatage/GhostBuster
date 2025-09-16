@@ -20,7 +20,7 @@ public final class GhostBusterPlugin extends JavaPlugin {
   @Override public void onEnable() {
     saveDefaultConfig();
     getCommand("ghostbuster").setExecutor(this);
-    
+
     this.cfg = PluginConfig.from(getConfig());
     this.platform = PlatformInfo.detect(Bukkit.getServer());
     this.scheduler = new SchedulerFacadeImpl(this, platform);
@@ -31,10 +31,13 @@ public final class GhostBusterPlugin extends JavaPlugin {
 
     this.service = new GhostBusterService(this, cfg, scheduler, platform);
     this.service.start();
+
     getLogger().info(LogFmt.of("dryRun", cfg.dryRun())
         .kv("intervalSec", cfg.scanIntervalSeconds())
         .kv("folia", platform.isFolia())
-        .kv("parallelTick", platform.parallelTickingDetected()).toString());
+        .kv("parallelTick", platform.parallelTickingDetected())
+        .kv("reflectorDebug", cfg.logReflectorDebug())
+        .toString());
   }
 
   @Override public void onDisable() {
@@ -47,10 +50,12 @@ public final class GhostBusterPlugin extends JavaPlugin {
       sender.sendMessage("No permission.");
       return true;
     }
+
     if (args.length == 0 || args[0].equalsIgnoreCase("status")) {
       sender.sendMessage(service.statusLine());
       return true;
     }
+
     if (args[0].equalsIgnoreCase("dryrun")) {
       boolean newVal = !cfg.dryRun();
       getConfig().set("dry-run", newVal);
@@ -59,15 +64,27 @@ public final class GhostBusterPlugin extends JavaPlugin {
       sender.sendMessage("dry-run set to " + newVal);
       return true;
     }
+
+    if (args[0].equalsIgnoreCase("debug")) {
+      boolean newVal = !cfg.logReflectorDebug();
+      getConfig().set("logging.reflector-debug", newVal);
+      saveConfig();
+      cfg = PluginConfig.from(getConfig());
+      sender.sendMessage("reflector-debug set to " + newVal);
+      return true;
+    }
+
     if (args[0].equalsIgnoreCase("scan")) {
       service.requestImmediateScan(sender::sendMessage);
       return true;
     }
+
     if (args[0].equalsIgnoreCase("prune") && args.length == 2) {
       service.requestPrune(args[1], sender::sendMessage);
       return true;
     }
-    sender.sendMessage("Usage: /ghostbuster <status|dryrun|scan|prune <uuid>>");
+
+    sender.sendMessage("Usage: /ghostbuster <status|dryrun|debug|scan|prune <uuid>>");
     return true;
   }
 }
