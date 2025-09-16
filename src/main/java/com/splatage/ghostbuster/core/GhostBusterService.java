@@ -20,7 +20,6 @@ import java.util.concurrent.*;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
-
 public final class GhostBusterService implements Listener {
   private final Plugin plugin;
   private final PluginConfig cfg;
@@ -45,12 +44,11 @@ public final class GhostBusterService implements Listener {
 
   public void start() {
     plugin.getServer().getPluginManager().registerEvents(this, plugin);
-    // Seed live set initially (sync)
     sched.runGlobalSync(() -> {
       Set<UUID> liveSnap = new HashSet<>();
       Map<String, Set<UUID>> perWorldTracked = new HashMap<>();
       liveSnap.addAll(live.keySet());
-      for (World w: Bukkit.getWorlds()) {
+      for (World w : Bukkit.getWorlds()) {
         for (Entity e : w.getEntities()) {
           Reflectors.track(e.getUniqueId(), e);
         }
@@ -58,7 +56,6 @@ public final class GhostBusterService implements Listener {
       }
     });
 
-    // periodic snapshot
     long period = Math.max(1, cfg.scanIntervalSeconds());
     analyzePool.scheduleAtFixedRate(this::snapshotThenAnalyze, period, period, TimeUnit.SECONDS);
   }
@@ -71,81 +68,84 @@ public final class GhostBusterService implements Listener {
   @EventHandler public void onAdd(EntityAddToWorldEvent e) {
     live.put(e.getEntity().getUniqueId(), e.getEntity().getWorld().getName());
   }
+
   @EventHandler public void onRemove(EntityRemoveFromWorldEvent e) {
     live.remove(e.getEntity().getUniqueId());
   }
 
   public String statusLine() {
-  return LogFmt.of("live", live.size())
-      .kv("ghosts", history.candidateSize())
-      .kv("retained", Reflectors.retainedCount())
-      .kv("lastGC", (System.currentTimeMillis() - lastGcTimestamp) / 1000 + "s")
-      .kv("dryRun", cfg.dryRun())
-      .kv("pwt", platform.parallelTickingDetected())
-      .toString();
+    return LogFmt.of("live", live.size())
+        .kv("ghosts", history.candidateSize())
+        .kv("retained", Reflectors.retainedCount())
+        .kv("lastGC", (System.currentTimeMillis() - lastGcTimestamp) / 1000 + "s")
+        .kv("dryRun", cfg.dryRun())
+        .kv("pwt", platform.parallelTickingDetected())
+        .toString();
   }
 
-public void requestImmediateScan(Consumer<String> reply) {
-  analyzePool.execute(() -> {
-    Map<String, Integer> result = snapshotThenAnalyze();
-    if (result.isEmpty()) {
-      reply.accept("Scan complete: no ghost candidates found.");
-    } else {
-      String summary = result.entrySet().stream()
-          .map(e -> e.getKey() + "=" + e.getValue())
-          .collect(Collectors.joining(" "));
-      reply.accept("Scan complete: " + summary);
-    }
-  });
-}
+  public void requestImmediateScan(Consumer<String> reply) {
+    analyzePool.execute(() -> {
+      Map<String, Integer> result = snapshotThenAnalyze();
+      if (result.isEmpty()) {
+        String msg = "Scan complete: no ghost candidates found.";
+        plugin.getLogger().info(msg);
+        reply.accept(msg);
+      } else {
+        String summary = result.entrySet().stream()
+            .map(e -> e.getKey() + "=" + e.getValue())
+            .collect(Collectors.joining(" "));
+        String msg = "Scan complete: " + summary;
+        plugin.getLogger().info(msg);
+        reply.accept(msg);
+      }
+    });
+  }
 
   public void requestPrune(String uuidStr, Consumer<String> reply) {
     try {
       UUID id = UUID.fromString(uuidStr);
       sched.withEntityWorld(id, world -> pruneOne(world, id, reply));
-    } catch (IllegalArgumentException ex) { reply.accept("Invalid UUID."); }
+    } catch (IllegalArgumentException ex) {
+      reply.accept("Invalid UUID.");
+    }
   }
 
-  // ---- Pipeline ----
-
-  private void snapshotThenAnalyze() {
-    // Step 1 (SYNC): snapshot trackers & live UUIDs
+  private Map<String, Integer> snapshotThenAnalyze() {
+    Map<String, Integer> resultMap = new HashMap<>();
     Map<String, Set<UUID>> perWorldTracked = new HashMap<>();
     Set<UUID> liveSnap = new HashSet<>();
+
     sched.runGlobalSync(() -> {
-      // live snapshot from cache (cheap) + sanity add of currently present
       liveSnap.addAll(live.keySet());
-      for (World w: Bukkit.getWorlds()) {
+      for (World w : Bukkit.getWorlds()) {
         perWorldTracked.put(w.getName(), nms.snapshotTrackedUUIDs(w, cfg.maxMapScanEntries()));
       }
       lastGcTimestamp = System.currentTimeMillis();
     });
 
-    // Step 2 (ASYNC): diff
     Map<String, List<UUID>> ghostsByWorld = new HashMap<>();
     for (var e : perWorldTracked.entrySet()) {
       List<UUID> ghosts = e.getValue().stream()
           .filter(u -> !liveSnap.contains(u))
           .collect(Collectors.toList());
 
-    if (!ghosts.isEmpty()) {
-      plugin.getLogger().info(
-        LogFmt.of("event", "ghosts.detected")
-              .kv("world", e.getKey())
-              .kv("count", ghosts.size())
-              .toString()
-      );
+      if (!ghosts.isEmpty()) {
+        plugin.getLogger().info(
+            LogFmt.of("event", "ghosts.detected")
+                .kv("world", e.getKey())
+                .kv("count", ghosts.size())
+                .toString()
+        );
+      }
+
+      List<UUID> filtered = history.filterStable(ghosts, cfg.hysteresisCycles());
+      ghostsByWorld.put(e.getKey(), filtered);
+      resultMap.put(e.getKey(), filtered.size());
     }
 
-      
-      ghostsByWorld.put(e.getKey(), history.filterStable(ghosts, cfg.hysteresisCycles()));
-    }
-
-
-    // Step 3 (SYNC): verify & prune
     if (!ghostsByWorld.isEmpty()) {
       sched.runGlobalSync(() -> {
-        for (World w: Bukkit.getWorlds()) {
+        for (World w : Bukkit.getWorlds()) {
           List<UUID> candidates = ghostsByWorld.getOrDefault(w.getName(), List.of());
           if (candidates.isEmpty()) continue;
           int allowed = unlinkRate.permit(candidates.size());
@@ -158,18 +158,21 @@ public void requestImmediateScan(Consumer<String> reply) {
         }
       });
     }
+
+    return resultMap;
   }
 
   private void pruneOne(World world, UUID id, Consumer<String> feedback) {
     boolean inWorld = world.getEntities().stream().anyMatch(e -> e.getUniqueId().equals(id));
     boolean inTrackers = nms.isInTrackers(world, id);
-    if (inWorld || !inTrackers) return; // not a ghost or already clean
+    if (inWorld || !inTrackers) return;
 
     if (cfg.dryRun() || (platform.parallelTickingDetected() && !cfg.allowUnderParallelTicking())) {
       var owners = nms.findOwners(world, id, cfg.logOwnerSample());
       feedback.accept("[DRY] Ghost " + id + " owners=" + owners);
       return;
     }
+
     boolean ok = nms.unlinkFromOwners(world, id);
     var owners = nms.findOwners(world, id, cfg.logOwnerSample());
     feedback.accept((ok ? "UNLINKED " : "FAILED ") + id + " owners=" + owners);
