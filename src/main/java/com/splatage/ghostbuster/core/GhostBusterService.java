@@ -10,8 +10,8 @@ import org.bukkit.World;
 import org.bukkit.entity.Entity;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.entity.EntityAddToWorldEvent;
-import org.bukkit.event.entity.EntityRemoveFromWorldEvent;
+import com.destroystokyo.paper.event.entity.EntityAddToWorldEvent;
+import com.destroystokyo.paper.event.entity.EntityRemoveFromWorldEvent;
 import org.bukkit.plugin.Plugin;
 
 import java.util.*;
@@ -54,8 +54,7 @@ public final class GhostBusterService implements Listener {
 
   public void stop() {
     try { analyzePool.shutdownNow(); } catch (Throwable ignored) {}
-    EntityRemoveFromWorldEvent.getHandlerList().unregister(this);
-    EntityAddToWorldEvent.getHandlerList().unregister(this);
+    org.bukkit.event.HandlerList.unregisterAll(this);
   }
 
   @EventHandler public void onAdd(EntityAddToWorldEvent e) {
