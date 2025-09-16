@@ -30,3 +30,8 @@ tasks.processResources {
         expand("version" to (project.version as String))
     }
 }
+
+tasks.named<Jar>("jar") {
+    archiveBaseName.set("GhostBuster")  // enforce capitalized name
+    archiveVersion.set(project.version.toString()) // include version in filename
+}
