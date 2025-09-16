@@ -36,7 +36,7 @@ public final class NmsIntrospector {
     int depth = 0;
     while (!dq.isEmpty() && depth < 3) {
       int sz = dq.size();
-      for (int i=0;i<sz;i++) {
+      for (int i = 0; i < sz; i++) {
         Object cur = dq.poll();
         if (cur == null || seen.contains(cur)) continue;
         seen.add(cur);
@@ -44,7 +44,7 @@ public final class NmsIntrospector {
         // Scan Map containers for UUIDs or entity-like objects
         for (Field f : fields(cur, fld -> Map.class.isAssignableFrom(fld.getType()))) {
           Object mapObj = getFieldValue(cur, f);
-          if (mapObj instanceof Map<?,?> m) {
+          if (mapObj instanceof Map<?, ?> m) {
             int count = 0;
             for (var e : m.entrySet()) {
               if (count++ > maxEntries) break;
@@ -56,14 +56,14 @@ public final class NmsIntrospector {
             }
           }
         }
-        // Enqueue interesting composite objects
+        // Enqueue interesting composite objects (MC/server packages only)
         for (Field f : fields(cur, fld ->
             !fld.getType().isPrimitive()
-            && !Map.class.isAssignableFrom(fld.getType())
-            && !Collection.class.isAssignableFrom(fld.getType())
+                && !Map.class.isAssignableFrom(fld.getType())
+                && !Collection.class.isAssignableFrom(fld.getType())
         )) {
           Object nxt = getFieldValue(cur, f);
-          if (nxt != null) dq.add(nxt);
+          if (nxt != null && isAllowedPackage(nxt.getClass())) dq.add(nxt);
         }
       }
       depth++;
@@ -99,7 +99,7 @@ public final class NmsIntrospector {
 
       for (Field f : fields(cur, fld -> Map.class.isAssignableFrom(fld.getType()))) {
         Object mapObj = getFieldValue(cur, f);
-        if (!(mapObj instanceof Map<?,?> m)) continue;
+        if (!(mapObj instanceof Map<?, ?> m)) continue;
 
         int count = 0;
         for (var e : m.entrySet()) {
@@ -111,13 +111,13 @@ public final class NmsIntrospector {
           }
         }
       }
-      // enqueue children
+      // Enqueue children (MC/server packages only)
       for (Field f : fields(cur, fld ->
           !fld.getType().isPrimitive()
-          && !Map.class.isAssignableFrom(fld.getType())
-          && !Collection.class.isAssignableFrom(fld.getType()))) {
+              && !Map.class.isAssignableFrom(fld.getType())
+              && !Collection.class.isAssignableFrom(fld.getType()))) {
         Object nxt = getFieldValue(cur, f);
-        if (nxt != null) dq.add(nxt);
+        if (nxt != null && isAllowedPackage(nxt.getClass())) dq.add(nxt);
       }
     }
     return owners;
@@ -147,7 +147,7 @@ public final class NmsIntrospector {
 
       for (Field f : fields(cur, fld -> Map.class.isAssignableFrom(fld.getType()))) {
         Object obj = getFieldValue(cur, f);
-        if (!(obj instanceof Map<?,?> m)) continue;
+        if (!(obj instanceof Map<?, ?> m)) continue;
 
         // Collect keys to remove (avoid CME)
         List<Object> removeKeys = new ArrayList<>();
@@ -165,13 +165,13 @@ public final class NmsIntrospector {
           try { m.remove(rk); changed = true; } catch (Throwable ignored) {}
         }
       }
-      // enqueue children
+      // Enqueue children (MC/server packages only)
       for (Field f : fields(cur, fld ->
           !fld.getType().isPrimitive()
-          && !Map.class.isAssignableFrom(fld.getType())
-          && !Collection.class.isAssignableFrom(fld.getType()))) {
+              && !Map.class.isAssignableFrom(fld.getType())
+              && !Collection.class.isAssignableFrom(fld.getType()))) {
         Object nxt = getFieldValue(cur, f);
-        if (nxt != null) dq.add(nxt);
+        if (nxt != null && isAllowedPackage(nxt.getClass())) dq.add(nxt);
       }
     }
     return changed;
@@ -199,7 +199,9 @@ public final class NmsIntrospector {
     // Also inspect declared fields for a UUID
     for (Field f : entity.getClass().getDeclaredFields()) {
       if (f.getType() == UUID.class) {
-        try { f.setAccessible(true); return (UUID) f.get(entity); } catch (Throwable ignored) {}
+        try {
+          if (f.trySetAccessible()) return (UUID) f.get(entity);
+        } catch (Throwable ignored) {}
       }
     }
     return null;
@@ -210,12 +212,23 @@ public final class NmsIntrospector {
     if (tracked == null) return;
     for (Field f : tracked.getClass().getDeclaredFields()) {
       try {
-        f.setAccessible(true);
+        if (!f.trySetAccessible()) continue;
         Object val = f.get(tracked);
         if (val instanceof Set<?> s) { s.clear(); }
         // Some forks use fastutil maps/sets: clear those too
-        if (val instanceof Map<?,?> m) { m.clear(); }
+        if (val instanceof Map<?, ?> m) { m.clear(); }
       } catch (Throwable ignored) {}
     }
+  }
+
+  // Only traverse inside these package roots (avoid JDK internals)
+  private static boolean isAllowedPackage(Class<?> cls) {
+    String n = cls.getName();
+    return n.startsWith("net.minecraft.")
+        || n.startsWith("io.papermc.")
+        || n.startsWith("ca.spottedleaf.")
+        || n.startsWith("it.unimi.")          // fastutil
+        || n.startsWith("com.destroystokyo.")
+        || n.startsWith("org.bukkit.");
   }
 }
