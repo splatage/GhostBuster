@@ -2,7 +2,6 @@ package com.splatage.ghostbuster.reflect;
 
 import com.splatage.ghostbuster.config.PluginConfig;
 import org.bukkit.World;
-import org.bukkit.craftbukkit.CraftWorld;
 
 import java.lang.reflect.Field;
 import java.util.*;
