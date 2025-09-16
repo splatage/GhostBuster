@@ -3,8 +3,17 @@ package com.splatage.ghostbuster.reflect;
 import java.lang.reflect.*;
 import java.util.*;
 import java.util.function.Predicate;
+import java.lang.ref.WeakReference;
+import java.lang.ref.ReferenceQueue;
+import java.util.UUID;
+import java.util.HashMap;
+import java.util.Map;
+
 
 public final class Reflectors {
+  private static final ReferenceQueue<Object> queue = new ReferenceQueue<>();
+  private static final Map<UUID, WeakReference<Object>> references = new HashMap<>();
+
   public static Object call(Object target, String method, Class<?>[] sig, Object... args) {
     try {
       Method m = target.getClass().getMethod(method, sig);
