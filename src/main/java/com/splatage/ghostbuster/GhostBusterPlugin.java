@@ -29,7 +29,7 @@ public final class GhostBusterPlugin extends JavaPlugin {
 
     this.service = new GhostBusterService(this, cfg, scheduler, platform);
     this.service.start();
-    getLogger().info(LogFmt.kv("dryRun", cfg.dryRun())
+    getLogger().info(LogFmt.of("dryRun", cfg.dryRun())
         .kv("intervalSec", cfg.scanIntervalSeconds())
         .kv("folia", platform.isFolia())
         .kv("parallelTick", platform.parallelTickingDetected()).toString());
