@@ -37,7 +37,7 @@ public static List<Field> fields(Object target, Predicate<Field> p) {
   }
   return out;
 }
-+
+
 private static boolean isJdkClass(Class<?> c) {
   String n = c.getName();
   return n.startsWith("java.") || n.startsWith("jdk.") || n.startsWith("sun.");
