@@ -34,6 +34,9 @@ public final class GhostBusterService implements Listener {
   private final SnapshotDiff history = new SnapshotDiff();
   private final RateLimiter unlinkRate;
 
+  // Guard to avoid duplicate verify schedules for the same UUID in rapid-churn scenarios
+  private final Set<UUID> pendingVerify = ConcurrentHashMap.newKeySet();
+
   private long lastGcTimestamp = 0;
 
   public GhostBusterService(Plugin plugin, PluginConfig cfg, SchedulerFacade sched, PlatformInfo platform) {
@@ -67,7 +70,12 @@ public final class GhostBusterService implements Listener {
   }
 
   @EventHandler public void onRemove(EntityRemoveFromWorldEvent e) {
-    live.remove(e.getEntity().getUniqueId());
+    UUID id = e.getEntity().getUniqueId();
+    live.remove(id);
+
+    // Event-driven verify to catch ghosts that appear between interval scans
+    int delay = Math.max(1, cfg.verifyDelayTicks()); // maps to scan.verify-delay-ticks
+    scheduleVerify(e.getEntity(), delay);
   }
 
   public String statusLine() {
@@ -179,5 +187,38 @@ public final class GhostBusterService implements Listener {
     boolean ok = nms.unlinkFromOwners(world, id);
     var owners = nms.findOwners(world, id, cfg.logOwnerSample());
     feedback.accept((ok ? "UNLINKED " : "FAILED ") + id + " owners=" + owners);
+  }
+
+  // Schedules a short delayed verify after entity removal to catch ghosts that would
+  // otherwise be invisible between periodic scans.
+  private void scheduleVerify(Entity entity, int delayTicks) {
+    final UUID id = entity.getUniqueId();
+    final World w = entity.getWorld();
+    final int bx = entity.getLocation().getBlockX();
+    final int bz = entity.getLocation().getBlockZ();
+
+    // prevent duplicate schedules for the same id
+    if (!pendingVerify.add(id)) return;
+
+    // After 'delayTicks', hop to the entity's region thread and verify ownership
+    sched.runLaterSync(delayTicks, () ->
+        sched.runAt(w, bx, bz, () -> {
+          try {
+            pendingVerify.remove(id);
+
+            // If the entity reappeared, do nothing
+            boolean backInWorld = w.getEntities().stream().anyMatch(en -> en.getUniqueId().equals(id));
+            if (backInWorld) return;
+
+            // If trackers still reference it, prune immediately (respects dry-run & PWT)
+            if (nms.isInTrackers(w, id)) {
+              pruneOne(w, id, msg -> plugin.getLogger().warning(msg));
+            }
+          } catch (Throwable t) {
+            plugin.getLogger().warning("verify-on-remove failed for " + id + ": " +
+                t.getClass().getSimpleName() + ": " + t.getMessage());
+          }
+        })
+    );
   }
 }
