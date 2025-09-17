@@ -15,6 +15,61 @@ public final class NmsIntrospector {
 
   public NmsIntrospector(Logger log, PluginConfig cfg) { this.log = log; this.cfg = cfg; }
 
+  // -------- debug: synthetic ghost injection --------
+  /**
+   * DEBUG ONLY: inject a synthetic "ghost" UUID reference into one of the
+   * server-side tracking maps so a scan can detect & prune it.
+   * We avoid JDK internals and only traverse MC/server packages.
+   */
+  @SuppressWarnings({ "rawtypes", "unchecked" })
+  public boolean debugInjectGhost(World world, UUID uuid) {
+    try {
+      Object sl = Reflectors.call(world, "getHandle", new Class<?>[0]); // ServerLevel (versioned type)
+      if (sl == null) return false;
+
+      // Candidate roots that commonly reference trackers/maps
+      List<Object> roots = new ArrayList<>();
+      roots.add(sl);
+      Object chunkSource = call(sl, "getChunkSource", new Class<?>[0]);
+      if (chunkSource != null) roots.add(chunkSource);
+      Object chunkMap = get(chunkSource, "chunkMap");
+      if (chunkMap != null) roots.add(chunkMap);
+
+      // BFS with package allowlist
+      Deque<Object> dq = new ArrayDeque<>(roots);
+      Set<Object> seen = Collections.newSetFromMap(new IdentityHashMap<>());
+
+      while (!dq.isEmpty()) {
+        Object cur = dq.poll();
+        if (cur == null || seen.contains(cur)) continue;
+        seen.add(cur);
+
+        // Try to inject into the first writable Map we encounter
+        for (Field f : fields(cur, fld -> Map.class.isAssignableFrom(fld.getType()))) {
+          Object obj = getFieldValue(cur, f);
+          if (obj instanceof Map m) {
+            try {
+              m.put(uuid, new Object()); // bogus value is fine; key presence is enough
+              return true;
+            } catch (Throwable ignored) {}
+          }
+        }
+
+        // Enqueue children (only MC/server packages)
+        for (Field f : fields(cur, fld ->
+            !fld.getType().isPrimitive()
+                && !Map.class.isAssignableFrom(fld.getType())
+                && !Collection.class.isAssignableFrom(fld.getType()))) {
+          Object nxt = getFieldValue(cur, f);
+          if (nxt != null && isAllowedPackage(nxt.getClass())) dq.add(nxt);
+        }
+      }
+    } catch (Throwable t) {
+      log.warning("debugInjectGhost failed: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+    }
+    return false;
+  }
+
   // -------- snapshots --------
 
   public Set<UUID> snapshotTrackedUUIDs(World world, int maxEntries) {
