@@ -8,7 +8,7 @@ author: splatage
 commands:
   ghostbuster:
     description: GhostBuster admin commands
-    usage: /ghostbuster <status|dryrun|prune <uuid>|scan>
+    usage: /ghostbuster <status | dryrun | debug | dump | scan | prune <uuid> | test>
 permissions:
   ghostbuster.admin:
     default: op
