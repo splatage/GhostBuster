@@ -18,7 +18,7 @@ public final class NmsIntrospector {
   // -------- debug: synthetic ghost injection --------
   /**
    * DEBUG ONLY: inject a synthetic "ghost" UUID reference into one of the
-   * server-side tracking maps so a scan can detect & prune it.
+   * server-side tracking maps so a scan can detect and prune it.
    * We avoid JDK internals and only traverse MC/server packages.
    */
   @SuppressWarnings({ "rawtypes", "unchecked" })
