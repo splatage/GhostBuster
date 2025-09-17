@@ -17,6 +17,7 @@ import org.bukkit.plugin.Plugin;
 
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -34,7 +35,7 @@ public final class GhostBusterService implements Listener {
   private final SnapshotDiff history = new SnapshotDiff();
   private final RateLimiter unlinkRate;
 
-  // Guard to avoid duplicate verify schedules for the same UUID in rapid-churn scenarios
+  // Avoid duplicate verify schedules for the same UUID in rapid-churn scenarios
   private final Set<UUID> pendingVerify = ConcurrentHashMap.newKeySet();
 
   private long lastGcTimestamp = 0;
@@ -47,8 +48,9 @@ public final class GhostBusterService implements Listener {
 
   public void start() {
     plugin.getServer().getPluginManager().registerEvents(this, plugin);
+
+    // Initial sync snapshot of live entities (legal on global because it only reads Bukkit API)
     sched.runGlobalSync(() -> {
-      // Initial sync to populate live entity snapshot
       for (World w : Bukkit.getWorlds()) {
         for (Entity e : w.getEntities()) {
           live.put(e.getUniqueId(), w.getName());
@@ -66,15 +68,16 @@ public final class GhostBusterService implements Listener {
   }
 
   @EventHandler public void onAdd(EntityAddToWorldEvent e) {
-    live.put(e.getEntity().getUniqueId(), e.getEntity().getWorld().getName());
+    var ent = e.getEntity();
+    live.put(ent.getUniqueId(), ent.getWorld().getName());
   }
 
   @EventHandler public void onRemove(EntityRemoveFromWorldEvent e) {
     UUID id = e.getEntity().getUniqueId();
     live.remove(id);
 
-    // Event-driven verify to catch ghosts that appear between interval scans
-    int delay = Math.max(1, cfg.verifyDelayTicks()); // maps to scan.verify-delay-ticks
+    // Event-driven verify to catch ghosts created between interval scans
+    int delay = Math.max(0, cfg.verifyDelayTicks()); // 0 means verify next tick
     scheduleVerify(e.getEntity(), delay);
   }
 
@@ -122,16 +125,29 @@ public final class GhostBusterService implements Listener {
 
   private Map<String, Integer> snapshotThenAnalyze() {
     Map<String, Integer> resultMap = new HashMap<>();
-    Map<String, Set<UUID>> perWorldTracked = new HashMap<>();
-    Set<UUID> liveSnap = new HashSet<>();
+    Map<String, Set<UUID>> perWorldTracked = new ConcurrentHashMap<>();
+    Set<UUID> liveSnap = new HashSet<>(live.keySet());
 
-    sched.runGlobalSync(() -> {
-      liveSnap.addAll(live.keySet());
-      for (World w : Bukkit.getWorlds()) {
-        perWorldTracked.put(w.getName(), nms.snapshotTrackedUUIDs(w, cfg.maxMapScanEntries()));
-      }
-      lastGcTimestamp = System.currentTimeMillis();
-    });
+    // Take per-world tracker snapshots on the world’s region thread
+    List<World> worlds = new ArrayList<>(Bukkit.getWorlds());
+    CountDownLatch latch = new CountDownLatch(worlds.size());
+    for (World w : worlds) {
+      sched.runAt(w, 0, 0, () -> {
+        try {
+          perWorldTracked.put(w.getName(), nms.snapshotTrackedUUIDs(w, cfg.maxMapScanEntries()));
+        } catch (Throwable t) {
+          plugin.getLogger().warning("[GhostBuster] snapshot failed in world " + w.getName() + ": " + t.getClass().getSimpleName());
+        } finally {
+          latch.countDown();
+        }
+      });
+    }
+    try {
+      // Allow generous time; if some world is stuck we still proceed with what we have
+      latch.await(15, TimeUnit.SECONDS);
+    } catch (InterruptedException ignored) {}
+
+    lastGcTimestamp = System.currentTimeMillis();
 
     Map<String, List<UUID>> ghostsByWorld = new HashMap<>();
     for (var e : perWorldTracked.entrySet()) {
@@ -153,28 +169,44 @@ public final class GhostBusterService implements Listener {
       resultMap.put(e.getKey(), filtered.size());
     }
 
+    // Prune per-world, on region thread, honoring rate limits
     if (!ghostsByWorld.isEmpty()) {
-      sched.runGlobalSync(() -> {
-        for (World w : Bukkit.getWorlds()) {
-          List<UUID> candidates = ghostsByWorld.getOrDefault(w.getName(), List.of());
-          if (candidates.isEmpty()) continue;
-          int allowed = unlinkRate.permit(candidates.size());
-          int pruned = 0;
-          for (UUID id : candidates) {
-            if (pruned >= allowed) break;
-            Reflectors.track(id, null); // Track ghost candidates only
-            pruneOne(w, id, msg -> plugin.getLogger().warning(msg));
-            pruned++;
-          }
+      for (World w : worlds) {
+        List<UUID> candidates = ghostsByWorld.getOrDefault(w.getName(), List.of());
+        if (candidates.isEmpty()) continue;
+
+        int allowed = unlinkRate.permit(candidates.size());
+        if (allowed <= 0) continue;
+
+        AtomicInteger pruned = new AtomicInteger(0);
+        for (UUID id : candidates) {
+          if (pruned.get() >= allowed) break;
+          sched.runAt(w, 0, 0, () -> {
+            if (pruned.get() >= allowed) return;
+            try {
+              Reflectors.track(id, null); // Track ghost candidates only
+              pruneOne(w, id, msg -> plugin.getLogger().warning(msg));
+            } finally {
+              pruned.incrementAndGet();
+            }
+          });
         }
-      });
+      }
     }
 
     return resultMap;
   }
 
   private void pruneOne(World world, UUID id, Consumer<String> feedback) {
-    boolean inWorld = world.getEntities().stream().anyMatch(e -> e.getUniqueId().equals(id));
+    boolean inWorld;
+    try {
+      // Cheap, region-safe when already on the region thread
+      inWorld = world.getEntity(id) != null;
+    } catch (Throwable t) {
+      // If world API is guarded, fall back to assuming “not present”
+      inWorld = false;
+    }
+
     boolean inTrackers = nms.isInTrackers(world, id);
     if (inWorld || !inTrackers) return;
 
@@ -190,35 +222,42 @@ public final class GhostBusterService implements Listener {
   }
 
   // Schedules a short delayed verify after entity removal to catch ghosts that would
-  // otherwise be invisible between periodic scans.
+  // otherwise be invisible between periodic scans. Runs on the entity's region thread.
   private void scheduleVerify(Entity entity, int delayTicks) {
+    if (platform.parallelTickingDetected() && !cfg.allowUnderParallelTicking()) {
+      // Config says: do not mutate/verify under parallel ticking
+      return;
+    }
+
     final UUID id = entity.getUniqueId();
     final World w = entity.getWorld();
     final int bx = entity.getLocation().getBlockX();
     final int bz = entity.getLocation().getBlockZ();
 
-    // prevent duplicate schedules for the same id
     if (!pendingVerify.add(id)) return;
 
-    // After 'delayTicks', hop to the entity's region thread and verify ownership
-    sched.runLaterSync(delayTicks, () ->
-        sched.runAt(w, bx, bz, () -> {
-          try {
-            pendingVerify.remove(id);
+    Runnable verifyTask = () -> sched.runAt(w, bx, bz, () -> {
+      try {
+        // If the entity came back, abort
+        if (w.getEntity(id) != null) return;
 
-            // If the entity reappeared, do nothing
-            boolean backInWorld = w.getEntities().stream().anyMatch(en -> en.getUniqueId().equals(id));
-            if (backInWorld) return;
+        // If trackers still reference it, prune (respects dry-run & PWT)
+        if (nms.isInTrackers(w, id)) {
+          pruneOne(w, id, msg -> plugin.getLogger().warning("verify: " + msg));
+        }
+      } catch (Throwable t) {
+        plugin.getLogger().warning("verify-on-remove failed for " + id + ": "
+            + t.getClass().getSimpleName() + ": " + t.getMessage());
+      } finally {
+        pendingVerify.remove(id);
+      }
+    });
 
-            // If trackers still reference it, prune immediately (respects dry-run & PWT)
-            if (nms.isInTrackers(w, id)) {
-              pruneOne(w, id, msg -> plugin.getLogger().warning(msg));
-            }
-          } catch (Throwable t) {
-            plugin.getLogger().warning("verify-on-remove failed for " + id + ": " +
-                t.getClass().getSimpleName() + ": " + t.getMessage());
-          }
-        })
-    );
+    if (delayTicks <= 0) {
+      // next tick
+      sched.runLaterSync(1, verifyTask);
+    } else {
+      sched.runLaterSync(delayTicks, verifyTask);
+    }
   }
 }
