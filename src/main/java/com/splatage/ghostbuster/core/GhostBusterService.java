@@ -107,6 +107,11 @@ public final class GhostBusterService implements Listener {
     }
   }
 
+  // DEBUG: delegate to NmsIntrospector for synthetic ghost injection
+  public boolean debugInject(World world, UUID uuid) {
+    return nms.debugInjectGhost(world, uuid);
+  }
+
   private Map<String, Integer> snapshotThenAnalyze() {
     Map<String, Integer> resultMap = new HashMap<>();
     Map<String, Set<UUID>> perWorldTracked = new HashMap<>();
